@@ -20,6 +20,12 @@ Messages stay in app memory and reset on reload. Live chat sends up to the lates
 
 `npx expo export --platform web`
 
+Hydration regression check (Chrome, mobile/desktop widths, light/dark, and resizing):
+
+1. Run `npm install --prefix .repair/browser playwright --no-audit --no-fund` to install the browser test tool outside application dependencies.
+2. Start `npx expo start --web --port 8090`.
+3. Run `node tests/web-hydration.cjs`. Set `CHROME_PATH` for a different Chrome location and `TEST_BASE_URL` for a different server URL. `PLAYWRIGHT_MODULE` can point to an existing Playwright installation.
+
 ## Hosting
 
 The web output is a server app, including the API route. Supply the two environment values on the server. Native production builds also need the deployed server URL set as the Expo Router plugin's `origin` in `app.json`.

@@ -1,9 +1,11 @@
 ﻿import { useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useColorScheme, useWindowDimensions, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { ComponentRef } from 'react';
 import { useEffect } from 'react';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useCompactLayout } from '@/hooks/use-compact-layout';
 
 type Message = { id: number; role: 'user' | 'assistant'; text: string };
 const suggestions = [
@@ -19,7 +21,7 @@ function demoReply(prompt: string) {
 }
 export default function HomeScreen() {
   const dark = useColorScheme() === 'dark';
-  const compact = useWindowDimensions().width < 600;
+  const compact = useCompactLayout();
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
   const [live, setLive] = useState(true);
