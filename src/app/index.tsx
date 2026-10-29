@@ -1,4 +1,4 @@
-﻿import { useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -87,9 +87,9 @@ export default function HomeScreen() {
             </Pressable>
           </View>
           <View style={s.modeRow}>
-            <Text style={[s.caption, { color: c.muted }]}>{live ? 'OpenAI · Live chat' : 'Demo · Sample replies'}</Text>
+            <Text style={[s.caption, { color: c.muted }]}>{live ? 'AI · Live chat' : 'Demo · Sample replies'}</Text>
             <Pressable accessibilityRole="button" onPress={() => { reset(); setLive(!live); }}>
-              <Text style={[s.modeLink, { color: c.text }]}>Switch to {live ? 'demo' : 'OpenAI'} · starts a new chat</Text>
+              <Text style={[s.modeLink, { color: c.text }]}>Switch to {live ? 'demo' : 'live chat'} · starts a new chat</Text>
             </Pressable>
           </View>
           <ScrollView ref={scroll} style={s.screen} contentContainerStyle={[s.conversation, !messages.length && s.empty]} keyboardShouldPersistTaps="handled" onContentSizeChange={() => { if (messages.length) scroll.current?.scrollToEnd({ animated: true }); }}>
@@ -111,7 +111,7 @@ export default function HomeScreen() {
               </View>
             ) : messages.map(message => (
               <View key={message.id} style={[s.message, { alignSelf: message.role === 'user' ? 'flex-end' : 'flex-start', backgroundColor: message.role === 'user' ? c.accent : c.surface, borderColor: c.border }]}>
-                <Text style={[s.messageLabel, { color: message.role === 'user' ? c.ink : c.muted }]}>{message.role === 'user' ? 'YOU' : live ? 'MISHIRJI · OPENAI' : 'MISHIRJI · DEMO'}</Text>
+                <Text style={[s.messageLabel, { color: message.role === 'user' ? c.ink : c.muted }]}>{message.role === 'user' ? 'YOU' : live ? 'MISHIRJI · AI' : 'MISHIRJI · DEMO'}</Text>
                 <Text selectable style={[s.messageText, { color: message.role === 'user' ? c.ink : c.text }]}>{message.text}</Text>
               </View>
             ))}
@@ -131,7 +131,7 @@ export default function HomeScreen() {
                 <Text style={[s.sendText, { color: c.ink }]}>↑</Text>
               </Pressable>
             </View>
-            <Text style={[s.footnote, { color: c.muted }]}>{live ? 'Messages are sent to OpenAI · AI can make mistakes' : 'Demo mode · Sample replies'} · Chats reset on reload</Text>
+            <Text style={[s.footnote, { color: c.muted }]}>{live ? 'Messages are sent to the AI provider · AI can make mistakes' : 'Demo mode · Sample replies'} · Chats reset on reload</Text>
           </View>
         </View>
       </KeyboardAvoidingView>

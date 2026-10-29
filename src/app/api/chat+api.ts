@@ -19,14 +19,21 @@ export async function POST(request: Request) {
       m.text.trim().length > 0 && m.text.length <= 8000) || messages.at(-1)?.role !== 'user') {
     return json({ error: 'Send 1–40 messages ending with a user message.' }, 400);
   }
-  const key = process.env.OPENAI_API_KEY;
+  const openrouterKey = process.env.OPENROUTER_API_KEY?.trim();
+  const key = openrouterKey || process.env.OPENAI_API_KEY;
   const model = process.env.OPENAI_MODEL;
-  if (!key || !model) return json({ error: 'Live chat is not configured yet. Set OPENAI_API_KEY and OPENAI_MODEL on the server.' }, 503);
+  if (!key || (!openrouterKey && !model)) return json({ error: 'Live chat is not configured yet. Set OPENROUTER_API_KEY, or OPENAI_API_KEY and OPENAI_MODEL, on the server.' }, 503);
   try {
-    const response = await fetch('https://api.openai.com/v1/responses', {
+    const response = await fetch(openrouterKey ? 'https://openrouter.ai/api/v1/chat/completions' : 'https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      body: JSON.stringify(openrouterKey ? {
+        model: 'openrouter/free', max_tokens: 1200, stream: false,
+        messages: [
+          { role: 'system', content: 'You are mishirji ka bot, a helpful, thoughtful assistant. Answer clearly and honestly. Match the user’s language. Ask for clarification when necessary.' },
+          ...messages.map(m => ({ role: m.role, content: m.text })),
+        ],
+      } : {
         model, store: false, max_output_tokens: 1200,
         instructions: 'You are mishirji ka bot, a helpful, thoughtful assistant. Answer clearly and honestly. Match the user’s language. Ask for clarification when necessary.',
         input: messages.map(m => ({ role: m.role, content: m.text })),
@@ -37,6 +44,13 @@ export async function POST(request: Request) {
       return json({ error: response.status === 429 ? 'The AI service is busy or its usage limit was reached. Try again later.' : 'The AI service could not complete this reply. Try again later.' }, response.status === 429 ? 429 : 502);
     }
     const data = await response.json();
+    if (openrouterKey) {
+      if (data.error) return json({ error: 'The AI service could not complete this reply. Try again later.' }, 502);
+      const choice = data.choices?.[0];
+      if (choice?.finish_reason !== 'stop') return json({ error: 'The AI reply was incomplete. Please try again.' }, 502);
+      const text = typeof choice.message?.content === 'string' ? choice.message.content.trim() : '';
+      return text ? json({ text }) : json({ error: 'The AI service returned an empty reply. Please try again.' }, 502);
+    }
     if (data.status !== 'completed') return json({ error: 'The AI reply was incomplete. Please try again.' }, 502);
     const text = (data.output ?? []).filter((item: { type: string }) => item.type === 'message')
       .flatMap((item: { content?: { type: string; text?: string; refusal?: string }[] }) => item.content ?? [])

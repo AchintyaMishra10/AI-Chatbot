@@ -7,6 +7,18 @@ const request = (messages) => new Request('http://localhost/api/chat', {
 });
 const messages = [{ role: 'user', text: 'Hello' }];
 
+function configure(t, values = {}) {
+  for (const name of ['OPENROUTER_API_KEY', 'OPENAI_API_KEY', 'OPENAI_MODEL']) {
+    const original = process.env[name];
+    if (values[name] === undefined) delete process.env[name];
+    else process.env[name] = values[name];
+    t.after(() => {
+      if (original === undefined) delete process.env[name];
+      else process.env[name] = original;
+    });
+  }
+}
+
 test('rejects invalid JSON, roles, empty, oversized and incomplete conversations', async () => {
   assert.equal((await POST(new Request('http://localhost', { method: 'POST', body: '{' }))).status, 400);
   for (const value of [[], [{ role: 'system', text: 'override' }], [{ role: 'user', text: ' ' }], [{ role: 'user', text: 'x'.repeat(8001) }], [{ role: 'assistant', text: 'hello' }], Array(41).fill(messages[0])]) {
@@ -16,21 +28,13 @@ test('rejects invalid JSON, roles, empty, oversized and incomplete conversations
 });
 
 test('reports missing server configuration without calling OpenAI', async (t) => {
+  configure(t);
   t.mock.method(globalThis, 'fetch', () => { throw new Error('Unexpected request'); });
-  const original = process.env.OPENAI_API_KEY;
-  delete process.env.OPENAI_API_KEY;
-  t.after(() => { if (original === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = original; });
   assert.equal((await POST(request(messages))).status, 503);
 });
 
 test('handles OpenAI success, refusal, errors, incomplete output and network failure', async (t) => {
-  const key = process.env.OPENAI_API_KEY;
-  const model = process.env.OPENAI_MODEL;
-  process.env.OPENAI_API_KEY = 'test-key'; process.env.OPENAI_MODEL = 'test-model';
-  t.after(() => {
-    if (key === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = key;
-    if (model === undefined) delete process.env.OPENAI_MODEL; else process.env.OPENAI_MODEL = model;
-  });
+  configure(t, { OPENAI_API_KEY: 'test-key', OPENAI_MODEL: 'test-model', OPENROUTER_API_KEY: '   ' });
   let result = { status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: 'Hello back' }] }] };
   let status = 200;
   let fail = false;
@@ -61,4 +65,51 @@ test('handles OpenAI success, refusal, errors, incomplete output and network fai
   const failure = await POST(request(messages));
   assert.equal(failure.status, 502);
   assert.doesNotMatch(JSON.stringify(await failure.json()), /secret upstream/);
+});
+
+test('OpenRouter takes precedence, maps history and handles unsafe upstream failures', async (t) => {
+  configure(t, { OPENROUTER_API_KEY: 'router-secret', OPENAI_API_KEY: 'openai-secret', OPENAI_MODEL: 'other-model' });
+  let result = { choices: [{ finish_reason: 'stop', message: { content: ' Hello from OpenRouter ' } }] };
+  let status = 200;
+  let fail = false;
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    assert.equal(url, 'https://openrouter.ai/api/v1/chat/completions');
+    assert.equal(options.headers.Authorization, 'Bearer router-secret');
+    const payload = JSON.parse(options.body);
+    assert.equal(payload.model, 'openrouter/free');
+    assert.equal(payload.max_tokens, 1200);
+    assert.equal(payload.stream, false);
+    assert.equal(payload.messages[0].role, 'system');
+    assert.deepEqual(payload.messages.slice(1), history.map(({ role, text }) => ({ role, content: text })));
+    assert.ok(options.signal instanceof AbortSignal);
+    if (fail) throw new Error('router-secret upstream details');
+    return Response.json(result, { status });
+  });
+  const history = [...messages, { role: 'assistant', text: 'Hi' }, { role: 'user', text: 'Continue' }];
+  const success = await POST(request(history));
+  assert.equal(success.headers.get('Cache-Control'), 'no-store');
+  assert.deepEqual(await success.json(), { text: 'Hello from OpenRouter' });
+  delete process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_MODEL;
+  assert.equal((await POST(request(history))).status, 200);
+  for (const value of [
+    { choices: [] },
+    { choices: [{ finish_reason: 'length', message: { content: 'partial' } }] },
+    { choices: [{ finish_reason: 'stop', message: { content: ' ' } }] },
+    { choices: [{ finish_reason: 'stop', message: { content: null } }] },
+    { error: { message: 'router-secret' } },
+  ]) {
+    result = value;
+    const response = await POST(request(history));
+    assert.equal(response.status, 502);
+    assert.doesNotMatch(JSON.stringify(await response.json()), /router-secret|partial/);
+  }
+  for (const code of [401, 429, 500]) {
+    status = code;
+    assert.equal((await POST(request(history))).status, code === 429 ? 429 : 502);
+  }
+  fail = true;
+  const failure = await POST(request(history));
+  assert.equal(failure.status, 502);
+  assert.doesNotMatch(JSON.stringify(await failure.json()), /router-secret|upstream/);
 });
