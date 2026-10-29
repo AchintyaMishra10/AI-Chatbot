@@ -18,7 +18,7 @@ export function WebBadge() {
       </ThemedText>
       <Image
         source={
-          scheme === 'dark'
+          scheme === 'dark' 
             ? require('@/assets/images/expo-badge-white.png')
             : require('@/assets/images/expo-badge.png')
         }
